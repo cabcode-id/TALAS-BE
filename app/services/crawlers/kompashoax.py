@@ -72,7 +72,11 @@ def get_data():
         if photo_wrap and photo_wrap.find('img'):
             image_url = photo_wrap.find('img').get('src', '')
         
-        content_paragraphs = content_soup.find('div', class_='read__content').find_all('p')
+        content_div = content_soup.find('div', class_='read__content')
+        content_paragraphs = []
+        if content_div:
+            content_paragraphs = content_div.find_all('p')
+            
         content = ' '.join(p.get_text(strip=True) for p in content_paragraphs)
         processed_content = extract_content(content)
 
