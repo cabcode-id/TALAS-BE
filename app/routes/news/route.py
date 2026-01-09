@@ -410,6 +410,7 @@ def top_news():
                     "title_index": tidx,
                     "title": title_detail.title,
                     "image": title_detail.image,
+                    "date": title_detail.date,
                     "all_summary": title_detail.all_summary,
                     "article_count": group.article_count,
                     "counts": counts
