@@ -8,7 +8,7 @@ def generate_title_service(data):
         raise TypeError("Input must be a list of news articles")
     
     df = pd.DataFrame(data)
-    for col in ['title', 'content', 'embedding']:
+    for col in ['title', 'content']:
         if col not in df.columns:
             raise ValueError(f"Input must contain {col} field")
     
