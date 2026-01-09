@@ -32,11 +32,15 @@ def create_documents(df):
             # metadata['ideology'] = 'liberalism' if row['ideology'] == 1 else 'conservative'
             metadata['ideology'] = row['ideology']
 
+        embedding = None
+        if 'embedding' in row and not pd.isnull(row['embedding']):
+            embedding = row['embedding']
+
         document = Document(
             text=row['content'],
             doc_id=str(index),
             metadata=metadata,
-            embedding=row['embedding']
+            embedding=embedding
         )
         documents.append(document)
     return documents

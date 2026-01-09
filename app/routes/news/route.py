@@ -12,6 +12,7 @@ def get_news():
         news_items = (
             db.session.query(Title)
             .filter(Title.date >= date.today() - timedelta(days=1))
+            .order_by(Title.date.desc())
             .all()
         )
 
