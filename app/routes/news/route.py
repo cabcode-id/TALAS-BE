@@ -243,22 +243,36 @@ def get_title_groups():
             db.func.date(Title.date) == date.today()
         ).all()
         
-        title_groups = {}
-        for (title_index,) in today_titles:
-            # Ambil semua artikel yang punya title_index sama
-            articles = (
-                Article.query.with_entities(
-                    Article.id, 
-                    Article.title, 
-                    Article.source
-                )
-                .filter(Article.title_index == title_index)
-                .all()
+        title_indices = [t.title_index for t in today_titles]
+        
+        if not title_indices:
+            return jsonify({
+                "success": True,
+                "data": {},
+                "count": 0
+            }), 200
+        
+        # OPTIMASI: Batch query semua articles sekaligus (menghindari N+1 query)
+        all_articles = (
+            Article.query.with_entities(
+                Article.id,
+                Article.title,
+                Article.source,
+                Article.title_index
             )
-            title_groups[title_index] = [
-                {"id": a.id, "title": a.title, "source": a.source}
-                for a in articles
-            ]
+            .filter(Article.title_index.in_(title_indices))
+            .all()
+        )
+        
+        # Grouping di Python (lebih cepat dari N queries)
+        title_groups = {idx: [] for idx in title_indices}
+        for a in all_articles:
+            if a.title_index in title_groups:
+                title_groups[a.title_index].append({
+                    "id": a.id,
+                    "title": a.title,
+                    "source": a.source
+                })
         
         return jsonify({
             "success": True,
@@ -269,30 +283,7 @@ def get_title_groups():
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 500
-    
 
-def calculate_ideology_counts(articles):
-    counts = {
-        "liberal": 0,
-        "conservative": 0,
-        "neutral": 0
-    }
-    
-    for article in articles:
-        ideology = article['ideology']
-        if ideology is not None:
-            try:
-                ideology_val = float(ideology)
-                if ideology_val <= 0.25:
-                    counts["liberal"] += 1
-                elif ideology_val >= 0.75:
-                    counts["conservative"] += 1
-                else:
-                    counts["neutral"] += 1
-            except (ValueError, TypeError):
-                pass
-    
-    return counts
 
 @news_bp.route("/count-side", methods=["GET"])
 def count_side():
@@ -301,38 +292,36 @@ def count_side():
         if not title_index:
             return jsonify({"success": False, "error": "No title_index provided"}), 400
 
-        # Ambil semua artikel berdasarkan title_index
-        articles = Article.query.filter_by(title_index=title_index).all()
+        # OPTIMASI: Hitung langsung di database dengan SQL aggregate
+        result = (
+            db.session.query(
+                func.count(Article.id).label("total"),
+                func.sum(case((Article.ideology <= 0.25, 1), else_=0)).label("liberal"),
+                func.sum(case((Article.ideology >= 0.75, 1), else_=0)).label("conservative"),
+                func.sum(case(
+                    ((Article.ideology > 0.25) & (Article.ideology < 0.75), 1), 
+                    else_=0
+                )).label("neutral")
+            )
+            .filter(Article.title_index == title_index)
+            .first()
+        )
 
-        if not articles:
+        if not result or result.total == 0:
             return jsonify({
                 "success": True, 
                 "message": "No articles found for this title_index", 
                 "count": 0
             }), 200
 
-        # Ubah ke list dict agar sesuai input fungsi calculate_ideology_counts
-        articles_data = [
-            {
-                "id": a.id,
-                "title": a.title,
-                "url": a.url,
-                "source": a.source,
-                "date": a.date,
-                "bias": a.bias,
-                "hoax": a.hoax,
-                "ideology": a.ideology,
-                "title_index": a.title_index
-            }
-            for a in articles
-        ]
-
-        counts = calculate_ideology_counts(articles_data)
-
         return jsonify({
             "success": True,
-            "counts": counts,
-            "total": len(articles)
+            "counts": {
+                "liberal": int(result.liberal or 0),
+                "conservative": int(result.conservative or 0),
+                "neutral": int(result.neutral or 0)
+            },
+            "total": int(result.total)
         }), 200
 
     except Exception as e:
@@ -373,37 +362,38 @@ def top_news():
         title_details_rows = Title.query.filter(Title.title_index.in_(title_indexes)).all()
         title_details_map = {t.title_index: t for t in title_details_rows}
 
-        # Ambil semua articles sekaligus
-        articles_rows = Article.query.filter(Article.title_index.in_(title_indexes)).all()
-
-        # Kelompokkan articles berdasarkan title_index
-        articles_map = {}
-        for art in articles_rows:
-            articles_map.setdefault(art.title_index, []).append(art)
+        # OPTIMASI: Hitung ideology counts langsung di database dengan SQL aggregate
+        ideology_counts = (
+            db.session.query(
+                Article.title_index,
+                func.sum(case((Article.ideology <= 0.25, 1), else_=0)).label("liberal"),
+                func.sum(case((Article.ideology >= 0.75, 1), else_=0)).label("conservative"),
+                func.sum(case(
+                    ((Article.ideology > 0.25) & (Article.ideology < 0.75), 1), 
+                    else_=0
+                )).label("neutral")
+            )
+            .filter(Article.title_index.in_(title_indexes))
+            .group_by(Article.title_index)
+            .all()
+        )
+        
+        # Mapping counts
+        counts_map = {
+            row.title_index: {
+                "liberal": int(row.liberal or 0),
+                "conservative": int(row.conservative or 0),
+                "neutral": int(row.neutral or 0)
+            }
+            for row in ideology_counts
+        }
 
         # Susun hasil akhir
         result = []
         for group in top_news_groups:
             tidx = group.title_index
             title_detail = title_details_map.get(tidx)
-            articles = articles_map.get(tidx, [])
-            
-            # Ubah ke list dict untuk calculate_ideology_counts
-            articles_data = [
-                {
-                    "id": a.id,
-                    "title": a.title,
-                    "url": a.url,
-                    "source": a.source,
-                    "date": a.date,
-                    "bias": a.bias,
-                    "hoax": a.hoax,
-                    "ideology": a.ideology,
-                    "title_index": a.title_index
-                }
-                for a in articles
-            ]
-            counts = calculate_ideology_counts(articles_data)
+            counts = counts_map.get(tidx, {"liberal": 0, "conservative": 0, "neutral": 0})
 
             if title_detail:
                 result.append({

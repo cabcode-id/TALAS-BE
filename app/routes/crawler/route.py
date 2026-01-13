@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app import db
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from app.services.crawlers import main as run_crawlers  
 from app.model  import Article , Title
@@ -22,9 +23,10 @@ def run_crawlers_endpoint():
         
         # Extract ?pantai, default False
         pantai = params.pop('pantai', False)
+        parallel = params.pop('parallel', True)
         
         # Jalankan crawler
-        results = run_crawlers(pantai=pantai, **params)
+        results = run_crawlers(pantai=pantai, parallel=parallel, **params)
         
         if not results:
             return jsonify({
@@ -96,32 +98,17 @@ def update_articles():
         processed_count = 0
         updated_clusters = 0
         update_data = []
-        
-        for article in articles:
-            try:
-                # Inisialisasi variabel
-                cluster_result = None
-                bias_result = None
-                hoax_result = None
-                cleaned_result = None
-                ideology_result = None
-                embedding_result = None
-                
-                # Cluster
-                cluster_result = predict_cluster(article.content)
-                
-                # Bias
-                bias_result = predictBias(article.content)
-                
-                # Hoax
-                hoax_result = predictHoax(article.content)
-                
-                # Clean + Ideology
-                cleaned_result = cleaned_service(article.content)
-                if cleaned_result:
-                    ideology_result = predictIdeology(cleaned_result)
-                
-                # Embedding
+
+        def _run_parallel_services(article):
+            results = {
+                "cluster": None,
+                "bias": None,
+                "hoax": None,
+                "cleaned": None,
+                "embedding": None,
+            }
+
+            def _embedding_task():
                 data_for_embedding = [{
                     "id": article.id,
                     "title": article.title,
@@ -129,17 +116,53 @@ def update_articles():
                 }]
                 embeddings = embedding_service(data_for_embedding)
                 if embeddings and len(embeddings) > 0:
-                    embedding_result = json.dumps(embeddings[0])
+                    return json.dumps(embeddings[0])
+                return None
+
+            tasks = {
+                "cluster": lambda: predict_cluster(article.content),
+                "bias": lambda: predictBias(article.content),
+                "hoax": lambda: predictHoax(article.content),
+                "cleaned": lambda: cleaned_service(article.content),
+                "embedding": _embedding_task,
+            }
+
+            max_workers = min(5, len(tasks))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(func): name for name, func in tasks.items()}
+                for future in as_completed(futures):
+                    name = futures[future]
+                    try:
+                        results[name] = future.result()
+                    except Exception:
+                        results[name] = None
+
+            ideology_result = None
+            if results["cleaned"]:
+                ideology_result = predictIdeology(results["cleaned"])
+
+            return {
+                "cluster": results["cluster"],
+                "bias": results["bias"],
+                "hoax": results["hoax"],
+                "cleaned": results["cleaned"],
+                "ideology": ideology_result,
+                "embedding": results["embedding"],
+            }
+        
+        for article in articles:
+            try:
+                results = _run_parallel_services(article)
                 
                 # Kumpulkan hasil
                 update_data.append({
                     'article': article,
-                    'cluster': cluster_result,
-                    'bias': bias_result,
-                    'hoax': hoax_result,
-                    'cleaned': cleaned_result,
-                    'ideology': ideology_result,
-                    'embedding': embedding_result
+                    'cluster': results['cluster'],
+                    'bias': results['bias'],
+                    'hoax': results['hoax'],
+                    'cleaned': results['cleaned'],
+                    'ideology': results['ideology'],
+                    'embedding': results['embedding']
                 })
                 
                 processed_count += 1
