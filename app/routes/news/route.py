@@ -84,9 +84,16 @@ def get_news_detail():
         if not title_index:
             return jsonify({"success": False, "error": "No title_index provided"}), 400
 
-        # Ambil data dari tabel title
+        # OPTIMASI: Ambil data Title dengan kolom yang diperlukan saja
         news = (
-            db.session.query(Title)
+            db.session.query(
+                Title.title,
+                Title.cluster,
+                Title.image,
+                Title.date,
+                Title.all_summary,
+                Title.analysis
+            )
             .filter(Title.title_index == title_index)
             .first()
         )
@@ -94,16 +101,41 @@ def get_news_detail():
         if not news:
             return jsonify({"success": False, "error": "Article not found"}), 404
 
-        # Ambil semua article yang punya title_index tsb
+        # OPTIMASI: Ambil articles dengan kolom yang diperlukan saja (tanpa content & embedding yang besar)
         articles = (
-            db.session.query(Article)
+            db.session.query(
+                Article.title,
+                Article.url,
+                Article.source,
+                Article.date,
+                Article.bias,
+                Article.hoax,
+                Article.ideology
+            )
             .filter(Article.title_index == title_index)
             .all()
         )
 
-        # Konversi list articles → dict
+        # OPTIMASI: Hitung ideology counts langsung saat iterasi (menghindari query tambahan)
+        liberal_count = 0
+        conservative_count = 0
+        neutral_count = 0
+        
         article_list = []
         for article in articles:
+            # Parse ideology untuk counting
+            try:
+                ideology_val = float(article.ideology) if article.ideology else 0.5
+            except (ValueError, TypeError):
+                ideology_val = 0.5
+            
+            if ideology_val <= 0.25:
+                liberal_count += 1
+            elif ideology_val >= 0.75:
+                conservative_count += 1
+            else:
+                neutral_count += 1
+            
             article_list.append({
                 "title": article.title,
                 "url": article.url,
@@ -114,7 +146,7 @@ def get_news_detail():
                 "ideology": article.ideology,
             })
 
-        # Bentuk response
+        # Bentuk response dengan ideology counts
         return jsonify({
             "success": True,
             "title": news.title,
@@ -123,7 +155,13 @@ def get_news_detail():
             "date": news.date,
             "all_summary": news.all_summary,
             "analysis": news.analysis,
-            "articles": article_list
+            "articles": article_list,
+            "counts": {
+                "liberal": liberal_count,
+                "conservative": conservative_count,
+                "neutral": neutral_count
+            },
+            "total_articles": len(article_list)
         })
 
     except Exception as e:

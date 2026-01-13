@@ -13,7 +13,7 @@ class Article(db.Model):
     bias = db.Column(db.String(50))
     hoax = db.Column(db.String(50))
     ideology = db.Column(db.String(50))
-    title_index = db.Column(db.Integer, db.ForeignKey('title.title_index'))
+    title_index = db.Column(db.Integer, db.ForeignKey('title.title_index'), index=True)
 
 class Title(db.Model):
     __tablename__ = 'title'
