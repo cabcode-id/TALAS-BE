@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from llama_index.core import Settings, Document, VectorStoreIndex, SummaryIndex
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
@@ -34,13 +33,8 @@ def create_documents(df):
             metadata['ideology'] = row['ideology']
 
         embedding = None
-        if 'embedding' in row:
-            value = row['embedding']
-            if isinstance(value, (list, tuple, np.ndarray)):
-                if len(value) > 0:
-                    embedding = value
-            elif pd.notnull(value):
-                embedding = value
+        if 'embedding' in row and not pd.isnull(row['embedding']):
+            embedding = row['embedding']
 
         document = Document(
             text=row['content'],
