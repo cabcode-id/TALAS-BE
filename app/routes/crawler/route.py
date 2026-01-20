@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app import db
+from app import db, logger
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -342,5 +342,7 @@ def process_articles():
         }), 200
 
     except Exception as e:
+        logger.error(f"Error in process_articles: {str(e)}")
+        logger.exception(e)
         db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 500
