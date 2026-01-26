@@ -1,3 +1,27 @@
+import nest_asyncio
+import nltk
+import os
+
+# Apply nest_asyncio to solve event loop issues with LlamaIndex on servers
+nest_asyncio.apply()
+
+# Download necessary NLTK data (CRITICAl for LlamaIndex on fresh servers)
+def init_nltk():
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        nltk.download('punkt')
+    
+    try:
+        nltk.data.find('tokenizers/punkt_tab')
+    except LookupError:
+        try:
+            nltk.download('punkt_tab')
+        except Exception:
+            pass
+
+init_nltk()
+
 from loguru import logger
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
