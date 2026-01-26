@@ -7,7 +7,7 @@ Settings.llm = OpenAI(model='gpt-4o-mini')
 Settings.embed_model = OpenAIEmbedding(model="text-embedding-ada-002")
 
 def getTitle(documents):
-    query_engine = VectorStoreIndex.from_documents(documents, use_async=False).as_query_engine(llm=Settings.llm)
+    query_engine = VectorStoreIndex.from_documents(documents).as_query_engine(llm=Settings.llm)
     titleQuery = """
     From the following articles, generate a single article title that summarizes the content of all articles.
     Be as factual, neutral, and objective as possible.
@@ -74,7 +74,7 @@ def create_summary(documents):
     Use Indonesian language. 
     """
 
-    summary_index = SummaryIndex.from_documents(documents, use_async=False)
+    summary_index = SummaryIndex.from_documents(documents)
     summary_query_engine = summary_index.as_query_engine(llm=Settings.llm, response_mode='tree_summarize')
     summary = summary_query_engine.query(summarizeQuery)
     return summary.response
@@ -130,7 +130,7 @@ def summarize_article(documents):
     return all_summary
     
 def analyze_article(documents, cuan_result=None):
-    query_engine = VectorStoreIndex.from_documents(documents, use_async=False).as_query_engine(llm=Settings.llm)
+    query_engine = VectorStoreIndex.from_documents(documents).as_query_engine(llm=Settings.llm)
 
     analysis = create_analysis(query_engine, cuan_result)
 
