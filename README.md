@@ -64,6 +64,41 @@ API ini dikembangkan menggunakan **Python (Flask)** untuk menyediakan layanan cr
    pip install -r requirements.txt
    ```
 
+## Virtual Env (Python 3.12.3)
+
+Repository ini sudah menyertakan file versi Python ([.python-version](.python-version) dan [.tool-versions](.tool-versions)) untuk memastikan semua pengembang memakai Python 3.12.3. Pilih salah satu alat berikut:
+
+- **UV (direkomendasikan, ringan & cepat)**
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  uv python install 3.12.3
+  uv venv
+  source .venv/bin/activate
+  uv pip install -r requirements.txt
+  ```
+
+- **pyenv**
+  ```bash
+  pyenv install -s 3.12.3
+  pyenv local 3.12.3
+  python -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
+  ```
+
+- **asdf**
+  ```bash
+  asdf plugin add python || true
+  asdf install
+  python -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
+  ```
+
+Catatan:
+- Folder venv (.venv/ atau venv/) sudah diabaikan di [.gitignore](.gitignore).
+- Jika memakai UV, perintah `uv python install` dan `uv venv` otomatis membaca versi dari [.python-version](.python-version).
+
 ---
 
 ## Menjalankan Server
